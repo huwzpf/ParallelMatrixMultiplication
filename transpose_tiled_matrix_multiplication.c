@@ -3,7 +3,7 @@
 #include <omp.h>
 #include <time.h>
 
-#define BLOCK_SIZE 64
+#define BLOCK_SIZE 32
 
 double *read_matrix(const char *filename, int *rows, int *cols) {
     FILE *file = fopen(filename, "r");
@@ -77,41 +77,16 @@ double *matrix_multiply(double *A, double *B, int rowsA, int colsA, int colsB) {
 
     double *B_T = transpose_matrix(B, colsA, colsB);
 
-    int num_threads = omp_get_max_threads();
-    int rows_per_thread = (rowsA + num_threads - 1) / num_threads; // Ceiling division
-    int columns_per_thread = (colsB + num_threads - 1) / num_threads; // For evenly spaced column start
-
-    #pragma omp parallel
-    {
-        int thread_id = omp_get_thread_num();
-
-        // Determine the row range for this thread
-        int row_start = thread_id * rows_per_thread;
-        int row_end = (row_start + rows_per_thread > rowsA) ? rowsA : row_start + rows_per_thread;
-
-        if (row_start < rowsA) {
-            // Determine the starting column for this thread with even spacing
-            int col_start = (thread_id * columns_per_thread) % colsB;
-
-            for (int i = row_start; i < row_end; i += BLOCK_SIZE) {
-                int col = col_start;
-                for (int count = 0; count < (colsB + (colsB % BLOCK_SIZE)); count += BLOCK_SIZE) {
-                    for (int ii = i; ii < i + BLOCK_SIZE && ii < row_end; ii++) {
-                        for (int jj = col; jj < col + BLOCK_SIZE && jj < colsB; jj++) {
-                            double sum = 0.0;
-                            #pragma omp simd
-                            for (int k = 0; k < colsA; k++) {
-                                sum += A[ii * colsA + k] * B_T[jj * colsA + k];
-                            }
-                            C[ii * colsB + jj] = sum;
-                        }
+    #pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int i_tile = 0; i_tile < rowsA; i_tile += BLOCK_SIZE) {
+        for (int j_tile = 0; j_tile < colsB; j_tile += BLOCK_SIZE) {
+            for (int i = i_tile; i < i_tile + BLOCK_SIZE && i < rowsA; i++) {
+                for (int j = j_tile; j < j_tile + BLOCK_SIZE && j < colsB; j++) {
+                    double sum = 0.0;
+                    for (int k = 0; k < colsA; k++) {
+                        sum += A[i * colsA + k] * B_T[j * colsA + k];
                     }
-
-                    // Move to the next column with wrap-around
-                    col += BLOCK_SIZE;
-                    if (col >= colsB) {
-                        col = 0;
-                    }
+                    C[i * colsB + j] = sum;
                 }
             }
         }
