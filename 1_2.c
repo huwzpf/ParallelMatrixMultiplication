@@ -3,10 +3,10 @@
 #include <omp.h>
 #include <time.h>
 
-double **read_matrix(const char *filename, int *rows, int *cols) {
+double *read_matrix(const char *filename, int *rows, int *cols) {
     FILE *file = fopen(filename, "r");
     if (!file) {
-        fprintf(stderr,"Error opening file\n");
+        fprintf(stderr, "Error opening file\n");
         exit(-1);
     }
 
@@ -16,18 +16,13 @@ double **read_matrix(const char *filename, int *rows, int *cols) {
         exit(-1);
     }
 
-    double **matrix = (double **)malloc((*rows) * sizeof(double *));
-    for (int i = 0; i < *rows; i++) {
-        matrix[i] = (double *)malloc((*cols) * sizeof(double));
-    }
+    double *matrix = (double *)malloc((*rows) * (*cols) * sizeof(double));
 
-    for (int i = 0; i < *rows; i++) {
-        for (int j = 0; j < *cols; j++) {
-            if (fscanf(file, "%lf", &matrix[i][j]) != 1) {
-                fprintf(stderr, "Invalid matrix data\n");
-                fclose(file);
-                exit(-1);
-            }
+    for (int i = 0; i < (*rows) * (*cols); i++) {
+        if (fscanf(file, "%lf", &matrix[i]) != 1) {
+            fprintf(stderr, "Invalid matrix data\n");
+            fclose(file);
+            exit(-1);
         }
     }
 
@@ -35,10 +30,10 @@ double **read_matrix(const char *filename, int *rows, int *cols) {
     return matrix;
 }
 
-void write_matrix(const char *filename, double **matrix, int rows, int cols) {
+void write_matrix(const char *filename, double *matrix, int rows, int cols) {
     FILE *file = fopen(filename, "w");
     if (!file) {
-        fprintf(stderr,"Error opening file\n");
+        fprintf(stderr, "Error opening file\n");
         exit(-1);
     }
 
@@ -46,7 +41,7 @@ void write_matrix(const char *filename, double **matrix, int rows, int cols) {
 
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            fprintf(file, "%lf ", matrix[i][j]);
+            fprintf(file, "%lf ", matrix[i * cols + j]);
         }
         fprintf(file, "\n");
     }
@@ -61,34 +56,24 @@ void validate_dimensions(int rowsA, int colsA, int rowsB, int colsB) {
     }
 }
 
-double **transpose_matrix(double **M, int rows, int cols) {
-    double **M_T = (double **)malloc(cols * sizeof(double *));
-    for (int i = 0; i < cols; i++) {
-        M_T[i] = (double *)malloc(rows * sizeof(double));
-    }
+double *transpose_matrix(double *M, int rows, int cols) {
+    double *M_T = (double *)malloc(rows * cols * sizeof(double));
 
     // Perform the transposition using OpenMP
     #pragma omp parallel for
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            M_T[j][i] = M[i][j];
+            M_T[j * rows + i] = M[i * cols + j];
         }
     }
 
     return M_T;
 }
 
-void free_matrix(double **matrix, int rows) {
-    for (int i = 0; i < rows; i++) {
-        free(matrix[i]);
-    }
-    free(matrix);
-}
-
-double *matrix_multiply(double **A, double **B, int rowsA, int colsA, int colsB) {
+double *matrix_multiply(double *A, double *B, int rowsA, int colsA, int colsB) {
     double *C = (double *)malloc(rowsA * colsB * sizeof(double));
 
-    double** B_T = transpose_matrix(B, colsA, colsB);
+    double *B_T = transpose_matrix(B, colsA, colsB);
 
     #pragma omp parallel for
     for (int i = 0; i < rowsA; i++) {
@@ -96,12 +81,13 @@ double *matrix_multiply(double **A, double **B, int rowsA, int colsA, int colsB)
             double sum = 0.0;
             #pragma omp simd
             for (int k = 0; k < colsA; k++) {
-                sum += A[i][k] * B_T[j][k];
+                sum += A[i * colsA + k] * B_T[j * colsA + k];
             }
-           C[i * colsB + j] = sum;
+            C[i * colsB + j] = sum;
         }
     }
-    free_matrix(B_T, colsB);
+
+    free(B_T);
     return C;
 }
 
@@ -112,7 +98,7 @@ int main(int argc, char *argv[]) {
     }
 
     int rowsA, colsA, rowsB, colsB;
-    double **A, **B, *C;
+    double *A, *B, *C;
 
     // Load matrices from files
     A = read_matrix(argv[1], &rowsA, &colsA);
@@ -131,12 +117,12 @@ int main(int argc, char *argv[]) {
     printf("Matrix multiplication completed in %f seconds\n", end_time - start_time);
 
     // Save the result matrix to file
-    // write_matrix(argv[3], C, rowsA, colsB);
+    write_matrix(argv[3], C, rowsA, colsB);
 
     // Free allocated memory
-    free_matrix(A, rowsA);
-    free_matrix(B, rowsB);
-    //free_matrix(C, rowsA);
+    free(A);
+    free(B);
     free(C);
+
     return 0;
 }
