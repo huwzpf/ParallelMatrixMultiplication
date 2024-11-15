@@ -3,6 +3,8 @@
 #include <omp.h>
 #include <time.h>
 
+#define BLOCK_SIZE 64
+
 double *read_matrix(const char *filename, int *rows, int *cols) {
     FILE *file = fopen(filename, "r");
     if (!file) {
@@ -76,14 +78,18 @@ double *matrix_multiply(double *A, double *B, int rowsA, int colsA, int colsB) {
     double *B_T = transpose_matrix(B, colsA, colsB);
 
     #pragma omp parallel for
-    for (int i = 0; i < rowsA; i++) {
-        for (int j = 0; j < colsB; j++) {
-            double sum = 0.0;
-            #pragma omp simd
-            for (int k = 0; k < colsA; k++) {
-                sum += A[i * colsA + k] * B_T[j * colsA + k];
+    for (int i = 0; i < rowsA; i += BLOCK_SIZE) {
+        
+        for (int j = 0; j < colsB; j += BLOCK_SIZE) {
+            for (int ii = i; ii < i + BLOCK_SIZE && ii < rowsA; ii++) {
+                for (int jj = j; jj < j + BLOCK_SIZE && jj < colsB; jj++) {
+                    double sum = 0.0;
+                    for (int k = 0; k < colsA; k++) {
+                        sum += A[ii * colsA + k] * B_T[jj * colsA + k];
+                    }
+                    C[ii * colsB + jj] = sum;
+                }
             }
-            C[i * colsB + j] = sum;
         }
     }
 
@@ -109,6 +115,7 @@ int main(int argc, char *argv[]) {
 
     printf("Done loading data, starting computations with %d threads\n", omp_get_max_threads());
     omp_set_num_threads(omp_get_max_threads());
+
     // Measure the time of matrix multiplication
     double start_time = omp_get_wtime();
     C = matrix_multiply(A, B, rowsA, colsA, colsB);
