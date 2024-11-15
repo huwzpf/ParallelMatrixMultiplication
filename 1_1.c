@@ -3,27 +3,29 @@
 #include <omp.h>
 #include <time.h>
 
-int **read_matrix(const char *filename, int *rows, int *cols) {
+double **read_matrix(const char *filename, int *rows, int *cols) {
     FILE *file = fopen(filename, "r");
     if (!file) {
-        fprintf(stderr, "Error opening file\n");
+        fprintf(stderr,"Error opening file\n");
         exit(-1);
     }
 
-    if (fscanf(file, "%d %d", rows, cols) != 2) {
+    if (fscanf(file, "%d %d\n", rows, cols) != 2) {
         fprintf(stderr, "Invalid matrix format\n");
+        fclose(file);
         exit(-1);
     }
 
-    int **matrix = (int **)malloc((*rows) * sizeof(int *));
+    double **matrix = (double **)malloc((*rows) * sizeof(double *));
     for (int i = 0; i < *rows; i++) {
-        matrix[i] = (int *)malloc((*cols) * sizeof(int));
+        matrix[i] = (double *)malloc((*cols) * sizeof(double));
     }
 
     for (int i = 0; i < *rows; i++) {
         for (int j = 0; j < *cols; j++) {
-            if (fscanf(file, "%d", &matrix[i][j]) != 1) {
+            if (fscanf(file, "%lf", &matrix[i][j]) != 1) {
                 fprintf(stderr, "Invalid matrix data\n");
+                fclose(file);
                 exit(-1);
             }
         }
@@ -35,7 +37,7 @@ int **read_matrix(const char *filename, int *rows, int *cols) {
     return matrix;
 }
 
-void write_matrix(const char *filename, int **matrix, int rows, int cols) {
+void write_matrix(const char *filename, double **matrix, int rows, int cols) {
     FILE *file = fopen(filename, "w");
     if (!file) {
         fprintf(stderr,"Error opening file\n");
@@ -46,7 +48,7 @@ void write_matrix(const char *filename, int **matrix, int rows, int cols) {
 
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            fprintf(file, "%d ", matrix[i][j]);
+            fprintf(file, "%lf ", matrix[i][j]);
         }
         fprintf(file, "\n");
     }
@@ -61,12 +63,12 @@ void validate_dimensions(int rowsA, int colsA, int rowsB, int colsB) {
     }
 }
 
-int **matrix_multiply(int **A, int **B, int rowsA, int colsA, int colsB) {
-    int **C = (int **)malloc(rowsA * sizeof(int *));
+double **matrix_multiply(double **A, double **B, int rowsA, int colsA, int colsB) {
+    double **C = (double **)malloc(rowsA * sizeof(double *));
     for (int i = 0; i < rowsA; i++) {
-        C[i] = (int *)malloc(colsB * sizeof(int));
+        C[i] = (double *)malloc(colsB * sizeof(double));
         for (int j = 0; j < colsB; j++) {
-            C[i][j] = 0;
+            C[i][j] = 0.0;
         }
     }
 
@@ -83,7 +85,7 @@ int **matrix_multiply(int **A, int **B, int rowsA, int colsA, int colsB) {
 }
 
 // Function to free allocated matrix memory
-void free_matrix(int **matrix, int rows) {
+void free_matrix(double **matrix, int rows) {
     for (int i = 0; i < rows; i++) {
         free(matrix[i]);
     }
@@ -93,11 +95,11 @@ void free_matrix(int **matrix, int rows) {
 int main(int argc, char *argv[]) {
     if (argc != 4) {
         fprintf(stderr, "Usage: %s <matrixA.txt> <matrixB.txt> <result.txt>\n", argv[0]);
-        return EXIT_FAILURE;
+        return -1;
     }
 
     int rowsA, colsA, rowsB, colsB;
-    int **A, **B, **C;
+    double **A, **B, **C;
 
     // Load matrices from files
     A = read_matrix(argv[1], &rowsA, &colsA);
@@ -121,5 +123,5 @@ int main(int argc, char *argv[]) {
     free_matrix(B, rowsB);
     free_matrix(C, rowsA);
 
-    return EXIT_SUCCESS;
+    return 0;
 }
