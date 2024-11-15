@@ -108,6 +108,8 @@ int main(int argc, char *argv[]) {
     // Validate matrix dimensions for multiplication
     validate_dimensions(rowsA, colsA, rowsB, colsB);
 
+    printf("Done loading data, starting computations with %d threads\n", omp_get_max_threads());
+    omp_set_num_threads(omp_get_max_threads());
     // Measure the time of matrix multiplication
     double start_time = omp_get_wtime();
     C = matrix_multiply(A, B, rowsA, colsA, colsB);

@@ -1,5 +1,6 @@
 import numpy as np
 import sys
+import time
 
 def read_matrix(filename):
     """Reads a matrix from a file and returns it as a NumPy array."""
@@ -17,7 +18,10 @@ def read_matrix(filename):
 def verify_multiplication(matrixA, matrixB, matrixC):
     """Verifies that matrixC is the product of matrixA and matrixB."""
     # Compute the matrix product using NumPy
+
+    start_time = time.time()
     computed_result = np.dot(matrixA, matrixB)
+    print(f"Verified in {time.time() - start_time} seconds")
 
     # Check if the result matches the provided matrixC
     if np.allclose(computed_result, matrixC, atol=1e-6):
