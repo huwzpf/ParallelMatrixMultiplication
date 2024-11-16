@@ -3,7 +3,9 @@
 #include <cuda_runtime.h>
 #include <time.h>
 
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE 4
+#define SHARED_CACHE_PER_THREAD_SIZE 2
+#define SHARED_CACHE_SIZE SHARED_CACHE_PER_THREAD_SIZE * BLOCK_SIZE
 // Divide x/y and round up
 #define CEIL_DIVISION(x, y) ((x) + (y) - 1)/(y)
 
@@ -61,63 +63,106 @@ void validate_dimensions(int rowsA, int colsA, int rowsB, int colsB) {
 }
 
 __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA, int colsA, int colsB) {
-    // Each block gets a square chunk (BLOCK_SIZE x BLOCK_SIZE) of C to compute based on chunks of A (BLOCK_SIZE x colsA) and B (colsA x BLOCK_SIZE)
-    // It does so by dividing chunks of A and B into square submatrices and accumulating partial results of submatrix multiplication:
-    // 1. Shared memory matrices As and Bs are allocated, each size of a BLOCK_SIZE x BLOCK_SIZE
-    // 2. A columns (being the same as B rows) are divided into colsA/BLOCK_SIZE submatrices (assumption is they divide without remainder)
-    // 3. Each thread initializes local variable val that will accumulate parial results for it's corresponding output C element
-    // 4. Offset along A columns (being the same as B rows) determining which submatrix is currently computed is initialized to 0
-    // 5. Each thread fetches single submatrix element into corresponding cell of As,Bs
-    // 6. Each thread does multiplication of As * Bs computing partial value for single element of C and adds the result to val
-    // 7. Submatrix offset is incremented
-    // 8. Steps 5-8 are repeated until pointer == colsA
-    // 9. C elements are fully computed and are copied to global memory
-
-    int subMatrixRow = threadIdx.y;
-    int subMatrixCol = threadIdx.x;
+    int startSubMatrixRow = threadIdx.y * SHARED_CACHE_PER_THREAD_SIZE;
+    int startSubMatrixCol = threadIdx.x * SHARED_CACHE_PER_THREAD_SIZE;
 
     // Row along which given thread moves through A and column along which it moves through B are constant 
-    int rowA = blockIdx.y * blockDim.y + threadIdx.y;
-    int colB = blockIdx.x * blockDim.x + threadIdx.x;
+    int startRowA = blockIdx.y * blockDim.y * SHARED_CACHE_PER_THREAD_SIZE + startSubMatrixRow;
+    int startColB = blockIdx.x * blockDim.x * SHARED_CACHE_PER_THREAD_SIZE + startSubMatrixCol;
 
-    __shared__ double As [BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ double Bs [BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ double As [SHARED_CACHE_SIZE][SHARED_CACHE_SIZE];
+    __shared__ double Bs [SHARED_CACHE_SIZE][SHARED_CACHE_SIZE];
 
-    double val = 0;
+    double acc[SHARED_CACHE_PER_THREAD_SIZE][SHARED_CACHE_PER_THREAD_SIZE] = {0};
+    double a_vals[SHARED_CACHE_PER_THREAD_SIZE];
+    double b_vals[SHARED_CACHE_PER_THREAD_SIZE];
+
+    int currentRowA, currentColA, currentRowB, currentColB;
 
 
-    for (int offset = 0; offset < colsA; offset+=BLOCK_SIZE) { 
+    // Each block loads a chunk of A and B matrices into shared memory
+    // Each thread loads SHARED_CACHE_PER_THREAD_SIZE by SHARED_CACHE_PER_THREAD_SIZE subchunk
+    // So entire chunk is a size of SHARED_CACHE_SIZE (BLOCK_SIZE * SHARED_CACHE_PER_THREAD_SIZE)
+    for (int blockOffset = 0; blockOffset < colsA; blockOffset+=SHARED_CACHE_SIZE) { 
         // Padding the matrices and keeping the kernel without range checking actually makes it slower
         
-        // Each thread moves through columns of matrix A
-        int colA = offset + threadIdx.x;
-        if (rowA < rowsA && colA < colsA) {
-            As[subMatrixRow][subMatrixCol] = A[rowA * colsA + colA];
-        }
-        else {
-            As[subMatrixRow][subMatrixCol] = 0.0;
-        }
-
-        // Each thread moves through rows of matrix B
-        int rowB = offset + threadIdx.y;
-        if (rowB < colsA && colB < colsB) {
-            Bs[subMatrixRow][subMatrixCol] = B[rowB * colsB + colB];
-        }
-        else {
-            Bs[subMatrixRow][subMatrixCol] = 0.0;
+        // Load all elements from A to As
+        #pragma unroll
+        for (int loadRowOffset = 0; loadRowOffset < SHARED_CACHE_PER_THREAD_SIZE; loadRowOffset++) {
+            #pragma unroll
+            for (int loadColOffset = 0; loadColOffset < SHARED_CACHE_PER_THREAD_SIZE; loadColOffset++) {
+                currentRowA = startRowA + loadRowOffset;
+                currentColA = blockOffset + startSubMatrixCol + loadColOffset;
+                if (currentRowA < rowsA && currentColA < colsA) {
+                    As[startSubMatrixRow + loadRowOffset][startSubMatrixCol + loadColOffset] = A[currentRowA * colsA + currentColA];
+                }
+                else {
+                    As[startSubMatrixRow + loadRowOffset][startSubMatrixCol + loadColOffset] = 0.0;
+                }
+            }
         }
 
-        __syncthreads();
-
-        for (int i = 0; i < BLOCK_SIZE; i++) {
-            val += As[subMatrixRow][i] * Bs[i][subMatrixCol];
+        // Load all elements from B to Bs
+        #pragma unroll
+        for (int loadRowOffset = 0; loadRowOffset < SHARED_CACHE_PER_THREAD_SIZE; loadRowOffset++) {
+            #pragma unroll
+            for (int loadColOffset = 0; loadColOffset < SHARED_CACHE_PER_THREAD_SIZE; loadColOffset++) {
+                currentRowB = blockOffset + startSubMatrixRow + loadRowOffset;
+                currentColB = startColB + loadColOffset;
+                if (currentRowA < colsA && currentColB < colsB) {
+                    Bs[startSubMatrixRow + loadRowOffset][startSubMatrixCol + loadColOffset] = A[currentRowB * colsB + currentColB];
+                }
+                else {
+                    Bs[startSubMatrixRow + loadRowOffset][startSubMatrixCol + loadColOffset] = 0.0;
+                }
+            }
         }
 
+        // Perform multiplication and accumulation
+        #pragma unroll
+        for (int sharedTileIndex = 0; sharedTileIndex < SHARED_CACHE_SIZE; ++sharedTileIndex) {
+
+            // Load values from shared memory into registers
+            #pragma unroll
+            for (int subRow = 0; subRow < SHARED_CACHE_PER_THREAD_SIZE; ++subRow) {
+                a_vals[subRow] = As[startSubMatrixRow + subRow][sharedTileIndex];
+            }
+
+            #pragma unroll
+            for (int subCol = 0; subCol < SHARED_CACHE_PER_THREAD_SIZE; ++subCol) {
+                b_vals[subCol] = Bs[sharedTileIndex][startSubMatrixCol + subCol];
+            }
+
+            // Compute products and accumulate in registers
+            #pragma unroll
+            for (int subRow = 0; subRow < SHARED_CACHE_PER_THREAD_SIZE; ++subRow) {
+                #pragma unroll
+                for (int subCol = 0; subCol < SHARED_CACHE_PER_THREAD_SIZE; ++subCol) {
+                    acc[subRow][subCol] += a_vals[subRow] * b_vals[subCol];
+                }
+            }
+        }
         __syncthreads();
     }
 
-    if (rowA < rowsA && colB < colsB)
-        C[rowA * colsB + colB] = val;
+
+    // Write the accumulated values back to C
+    #pragma unroll
+    for (int subRow = 0; subRow < SHARED_CACHE_PER_THREAD_SIZE; ++subRow) {
+        int globalRow = startRowA + subRow;
+        printf("%d\n", globalRow);
+        if (globalRow >= rowsA) continue;
+        #pragma unroll
+        for (int subCol = 0; subCol < SHARED_CACHE_PER_THREAD_SIZE; ++subCol) {
+            int globalCol = startColB + subCol;
+            if (globalCol >= colsB) continue;
+            printf("%d %d\n", globalRow, globalCol);
+            if (globalRow < 10 && globalCol < 10) {
+                printf("%lf\n", acc[subRow][subCol]);
+            }
+            C[globalRow * colsB + globalCol] = acc[subRow][subCol];
+        }
+    }
 }
 
 double *matrix_multiply_cuda(double *A, double *B, int rowsA, int colsA, int colsB) {
