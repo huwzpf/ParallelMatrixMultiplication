@@ -61,11 +61,9 @@ __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA,
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (row < rowsA && col < colsB) {
-        double value = 0.0;
         for (int k = 0; k < colsA; ++k) {
-            value += A[row * colsA + k] * B[k * colsB + col];
+            C[row * colsB + col] += A[row * colsA + k] * B[k * colsB + col];
         }
-        C[row * colsB + col] = value;
     }
 }
 
