@@ -4,6 +4,8 @@
 #include <time.h>
 
 #define BLOCK_SIZE 16
+// Divide x/y and round up
+#define CEIL_DIVISION(x, y) ((x) + (y) - 1)/(y)
 
 double *read_matrix(const char *filename, int *rows, int *cols) {
     FILE *file = fopen(filename, "r");
@@ -59,7 +61,6 @@ void validate_dimensions(int rowsA, int colsA, int rowsB, int colsB) {
 }
 
 __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA, int colsA, int colsB) {
-    // This function assumes that all dimensions of A and B are divisible by BLOCK_SIZE
     // Each block gets a square chunk (BLOCK_SIZE x BLOCK_SIZE) of C to compute based on chunks of A (BLOCK_SIZE x colsA) and B (colsA x BLOCK_SIZE)
     // It does so by dividing chunks of A and B into square submatrices and accumulating partial results of submatrix multiplication:
     // 1. Shared memory matrices As and Bs are allocated, each size of a BLOCK_SIZE x BLOCK_SIZE
@@ -85,14 +86,26 @@ __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA,
     double val = 0;
 
 
-    for (int offset = 0; offset < colsA; offset+=BLOCK_SIZE) {
+    for (int offset = 0; offset < colsA; offset+=BLOCK_SIZE) { 
+        // Padding the matrices and keeping the kernel without range checking actually makes it slower
+        
         // Each thread moves through columns of matrix A
         int colA = offset + threadIdx.x;
-        As[subMatrixRow][subMatrixCol] = A[rowA * colsA + colA];
+        if (rowA < rowsA && colA < colsA) {
+            As[subMatrixRow][subMatrixCol] = A[rowA * colsA + colA];
+        }
+        else {
+            As[subMatrixRow][subMatrixCol] = 0.0;
+        }
 
         // Each thread moves through rows of matrix B
         int rowB = offset + threadIdx.y;
-        Bs[subMatrixRow][subMatrixCol] = B[rowB * colsB + colB];
+        if (rowB < colsA && colB < colsB) {
+            Bs[subMatrixRow][subMatrixCol] = B[rowB * colsB + colB];
+        }
+        else {
+            Bs[subMatrixRow][subMatrixCol] = 0.0;
+        }
 
         __syncthreads();
 
@@ -103,47 +116,32 @@ __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA,
         __syncthreads();
     }
 
-    C[rowA * colsB + colB] = val;
+    if (rowA < rowsA && colB < colsB)
+        C[rowA * colsB + colB] = val;
 }
 
 double *matrix_multiply_cuda(double *A, double *B, int rowsA, int colsA, int colsB) {
     double *C = (double *)malloc(rowsA * colsB * sizeof(double));
 
-    int paddedRowsA = ((rowsA + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE;
-    int paddedColsA = ((colsA + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE;
-    int paddedColsB = ((colsB + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE;
-
-    size_t sizeA_padded = paddedRowsA * paddedColsA * sizeof(double);
-    size_t sizeB_padded = paddedColsA * paddedColsB * sizeof(double);
-    size_t sizeC_padded = paddedRowsA * paddedColsB * sizeof(double);
+    size_t sizeA = rowsA * colsA * sizeof(double);
+    size_t sizeB = colsA * colsB * sizeof(double);
+    size_t sizeC = rowsA * colsB * sizeof(double);
 
     double *d_A, *d_B, *d_C;
-    cudaMalloc((void **)&d_A, sizeA_padded);
-    cudaMalloc((void **)&d_B, sizeB_padded);
-    cudaMalloc((void **)&d_C, sizeC_padded);
+    cudaMalloc((void **)&d_A, sizeA);
+    cudaMalloc((void **)&d_B, sizeB);
+    cudaMalloc((void **)&d_C, sizeC);
 
-    cudaMemset(d_A, 0, sizeA_padded);
-    cudaMemset(d_B, 0, sizeB_padded);
+    cudaMemcpy(d_A, A, sizeA, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, B, sizeB, cudaMemcpyHostToDevice);
 
-    // Copy matrix A to the padded device matrix d_A
-    for (int i = 0; i < rowsA; i++) {
-        cudaMemcpy(&d_A[i * paddedColsA], &A[i * colsA], colsA * sizeof(double), cudaMemcpyHostToDevice);
-    }
+    dim3 blockDim(16, 16);
+    dim3 gridDim(CEIL_DIVISION(colsB, blockDim.x), CEIL_DIVISION(rowsA, blockDim.y));
 
-    // Copy matrix B to the padded device matrix d_B
-    for (int i = 0; i < colsA; i++) {
-        cudaMemcpy(&d_B[i * paddedColsB], &B[i * colsB], colsB * sizeof(double), cudaMemcpyHostToDevice);
-    }
-
-    dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
-    dim3 gridDim(paddedColsB / BLOCK_SIZE , paddedRowsA / BLOCK_SIZE);
-    
-    matrixMultiplyKernel<<<gridDim, blockDim>>>(d_A, d_B, d_C, paddedRowsA, paddedColsA, paddedColsB);
+    matrixMultiplyKernel<<<gridDim, blockDim>>>(d_A, d_B, d_C, rowsA, colsA, colsB);
     cudaDeviceSynchronize();
 
-    for (int i = 0; i < rowsA; i++) {
-        cudaMemcpy(&C[i * colsB], &d_C[i * paddedColsB], colsB * sizeof(double), cudaMemcpyDeviceToHost);
-    }
+    cudaMemcpy(C, d_C, sizeC, cudaMemcpyDeviceToHost);
 
     cudaFree(d_A);
     cudaFree(d_B);
