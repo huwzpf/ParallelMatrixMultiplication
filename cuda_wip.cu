@@ -3,7 +3,7 @@
 #include <cuda_runtime.h>
 #include <time.h>
 
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE 64
 // Divide x/y and round up
 #define CEIL_DIVISION(x, y) ((x) + (y) - 1)/(y)
 
@@ -74,10 +74,12 @@ __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA,
     // 9. C elements are fully computed and are copied to global memory
 
     int subMatrixRow = threadIdx.y;
-
-    // Row along which given thread moves through A and column along which it moves through B are constant 
+    // Divide grid into colsB / BLOCK_SIZE x rowsA / BLOCK_SIZE blocks
+    // Each block calculates square piece of output of size BLOCK_SIZE x BLOCK_SIZE
+    // Each block is divided into BLOCK_SIZE threads where each thread calculates one row of output matrix
+    // Row A is index of row in output matrix (the same as row index in input matrix A)
+    // startColB is index of first B column that will be used for calculations by given thread block
     int rowA = blockIdx.y * blockDim.y + threadIdx.y;
-    printf("%d\n", rowA);
     int startColB = blockIdx.x * BLOCK_SIZE;
 
     // printf("Hello from thread %d, %d - rowA=%d, startColB=%d\n", threadIdx.x, threadIdx.y, rowA, startColB);
@@ -126,9 +128,12 @@ __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA,
 
     if (rowA < rowsA) {
     // printf("RowA = %d\n", rowA);
-        for (int col = startColB; col < colsB; col++) {
+        for (int col = 0; col < BLOCK_SIZE; col++) {
+            if (col + startColB >= colsB) {
+                continue;
+            }
             // printf("startCol = %d row = %d col = %d c_values[%d] = %lf\n",rowA, col, col - startColB, c_values[col - startColB] );
-            C[rowA * colsB + col] = c_values[col - startColB];
+            C[rowA * colsB + col + startColB] = c_values[col];
         }
     }
 }
@@ -148,11 +153,17 @@ double *matrix_multiply_cuda(double *A, double *B, int rowsA, int colsA, int col
     cudaMemcpy(d_A, A, sizeA, cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, B, sizeB, cudaMemcpyHostToDevice);
 
-    dim3 blockDim(1, 16);
-    dim3 gridDim(CEIL_DIVISION(colsB, BLOCK_SIZE), CEIL_DIVISION(rowsA, BLOCK_SIZE));
-
+    dim3 blockDim(BLOCK_SIZE);
+    dim3 gridDim(CEIL_DIVISION(colsB, BLOCK_SIZE), CEIL_DIVISION(rowsA, BLOCK_SIZE));    
     matrixMultiplyKernel<<<gridDim, blockDim>>>(d_A, d_B, d_C, rowsA, colsA, colsB);
-    cudaDeviceSynchronize();
+    cudaError_t err = cudaGetLastError();
+if (err != cudaSuccess) {
+    printf("Kernel launch error: %s\n", cudaGetErrorString(err));
+}
+    err =cudaDeviceSynchronize();
+if (err != cudaSuccess) {
+    printf("Kernel launch error: %s\n", cudaGetErrorString(err));
+}
 
     cudaMemcpy(C, d_C, sizeC, cudaMemcpyDeviceToHost);
 
