@@ -3,7 +3,7 @@
 #include <cuda_runtime.h>
 #include <time.h>
 
-#define BLOCK_SIZE 64
+#define BLOCK_SIZE 32
 // Divide x/y and round up
 #define CEIL_DIVISION(x, y) ((x) + (y) - 1)/(y)
 
@@ -98,7 +98,7 @@ __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA,
                 }
 
                 a_values[i] = A[rowA * colsA + i + offset];
-                // printf("[Thread %d] a_values[%d] = (%d, %d) = %lf\n", threadIdx.y, i, rowA, i + offset, a_values[i]);
+                // printf("[Thread %d %d (%d %d)] a_values[%d] = (%d, %d) = %lf\n",threadIdx.x, threadIdx.y, blockIdx.x, blockIdx.y, i, rowA, i + offset, a_values[i]);
             }
         }
 
@@ -106,7 +106,7 @@ __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA,
         for (int i = 0; i < BLOCK_SIZE; i++) {
             if ((startColB + i) < colsB && (offset + subMatrixRow) < colsA) {
                 Bs[subMatrixRow * BLOCK_SIZE + i] = B[(offset + subMatrixRow) * colsB + startColB + i];
-                // printf("[Thread %d] Bs[%d, %d] = (%d, %d)\n", threadIdx.y, subMatrixRow, i, (offset + subMatrixRow), startColB + i);
+                // printf("[Thread %d (%d %d)] Bs[%d, %d] = (%d, %d)\n", threadIdx.y, blockIdx.x, blockIdx.y, subMatrixRow, i, (offset + subMatrixRow), startColB + i);
             }
             else {
                 Bs[subMatrixRow * BLOCK_SIZE + i] = 0;
@@ -118,7 +118,7 @@ __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA,
         // Compute each column of C
         for (int row = 0; row < BLOCK_SIZE; row++) {
             for (int col = 0; col < BLOCK_SIZE; col++) {
-                //printf("[Thread %d] c_values[%d] += %lf * %lf\n", threadIdx.y, col, a_values[row], Bs[row * BLOCK_SIZE + col]);
+                //printf("[Thread %d (%d %d)] c_values[%d] += %lf * %lf\n", threadIdx.y, blockIdx.x, blockIdx.y, col, a_values[row], Bs[row * BLOCK_SIZE + col]);
                 c_values[col] += a_values[row] * Bs[row * BLOCK_SIZE + col];
             }
         }
@@ -153,7 +153,7 @@ double *matrix_multiply_cuda(double *A, double *B, int rowsA, int colsA, int col
     cudaMemcpy(d_A, A, sizeA, cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, B, sizeB, cudaMemcpyHostToDevice);
 
-    dim3 blockDim(BLOCK_SIZE);
+    dim3 blockDim(1, BLOCK_SIZE);
     dim3 gridDim(CEIL_DIVISION(colsB, BLOCK_SIZE), CEIL_DIVISION(rowsA, BLOCK_SIZE));    
     matrixMultiplyKernel<<<gridDim, blockDim>>>(d_A, d_B, d_C, rowsA, colsA, colsB);
     cudaError_t err = cudaGetLastError();
