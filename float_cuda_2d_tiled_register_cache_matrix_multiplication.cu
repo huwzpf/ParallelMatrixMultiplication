@@ -101,7 +101,7 @@ __global__ void matrixMultiplyKernel(float *A, float *B, float *C, int rowsA, in
     int tileColStart = TILE_SIZE * COL_IN_SUBMATRIX(threadId, tilesPerRow);
     
     // Each block gets a square chunk (BLOCK_SIZE x BLOCK_SIZE) of C to compute based on chunks of A (BLOCK_SIZE x colsA) and B (colsA x BLOCK_SIZE)
-    // Each thread gets a TILE_SIZE x TILE_SIZE piece of C submatrix
+    // Each thread computes a TILE_SIZE x TILE_SIZE piece of C submatrix
     // It does so by dividing chunks of A and B into rectangular submatrices (As and Bs) and accumulating partial results of submatrix multiplication
     // Algorithm steps:
     // 1. Shared memory matrices As (BLOCK_SIZE x BLOCK_STEP) and Bs (BLOCK_STEP x BLOCK_SIZE) are allocated

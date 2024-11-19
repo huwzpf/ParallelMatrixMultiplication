@@ -13,7 +13,7 @@ def read_matrix(filename):
             matrix.append(row)
         return np.array(matrix)
 
-def verify_multiplication(matrixA, matrixB, matrixC):
+def verify_multiplication(matrixA, matrixB, matrixC, run_name):
     """Verifies that matrixC is the product of matrixA and matrixB."""
     matrixA = matrixA.astype(np.float32)
     matrixB = matrixB.astype(np.float32)
@@ -53,7 +53,7 @@ def verify_multiplication(matrixA, matrixB, matrixC):
         plt.title("Relative Differences Heatmap")
         plt.xlabel("Column Index")
         plt.ylabel("Row Index")
-        heatmap_filename = "relative_differences_heatmap.png"
+        heatmap_filename = f"{run_name}_relative_differences_heatmap.png"
         plt.savefig(heatmap_filename)
         print(f"Heatmap saved as {heatmap_filename}")
         plt.close()
@@ -63,14 +63,14 @@ def verify_multiplication(matrixA, matrixB, matrixC):
         plt.title("Distribution of Relative Differences (Log Scale)")
         plt.xlabel("Relative Difference")
         plt.ylabel("Frequency (Log Scale)")
-        histogram_filename = "relative_differences_histogram.png"
+        histogram_filename = f"{run_name}_relative_differences_histogram.png"
         plt.savefig(histogram_filename)
         print(f"Histogram saved as {histogram_filename}")
         plt.close()
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("Usage: python verify_result.py <matrixA.txt> <matrixB.txt> <result.txt>")
+    if len(sys.argv) != 5:
+        print("Usage: python verify_result.py <matrixA.txt> <matrixB.txt> <result.txt> <run_name>")
         sys.exit(-1)
 
     matrixA_filename = sys.argv[1]
@@ -83,4 +83,4 @@ if __name__ == "__main__":
     matrixC = read_matrix(result_filename)
 
     print("Verifying the result...")
-    verify_multiplication(matrixA, matrixB, matrixC)
+    verify_multiplication(matrixA, matrixB, matrixC, sys.argv[4])
