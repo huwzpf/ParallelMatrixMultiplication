@@ -1,0 +1,125 @@
+float_cpu_transpose_tiled_matrix_multiplication
+Average Runtime: 2.337500 seconds
+Uncertainty: ±0.125000 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.4010 seconds
+Verification failed: The result is incorrect.
+Maximum relative difference: 22.135656
+Average relative difference: 0.000009
+Relative difference percentiles:
+  25th: 0.000000
+  50th: 0.000001
+  75th: 0.000002
+  95th: 0.000009
+  99th: 0.000045
+Percentage of entries with relative difference > 1%: 0.004396% = 1055/24000000
+Heatmap saved as float_cpu_transpose_tiled_matrix_multiplication_relative_differences_heatmap.png
+Histogram saved as float_cpu_transpose_tiled_matrix_multiplication_relative_differences_histogram.png
+double_cpu_transpose_tiled_matrix_multiplication
+Average Runtime: 2.540328 seconds
+Uncertainty: ±0.160015 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.4010 seconds
+Verification successful: The result is correct.
+float_cpu_simple_matrix_multiplication
+Average Runtime: 22.793750 seconds
+Uncertainty: ±0.375000 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.4009 seconds
+Verification failed: The result is incorrect.
+Maximum relative difference: 22.135656
+Average relative difference: 0.000009
+Relative difference percentiles:
+  25th: 0.000000
+  50th: 0.000001
+  75th: 0.000002
+  95th: 0.000009
+  99th: 0.000045
+Percentage of entries with relative difference > 1%: 0.004396% = 1055/24000000
+Heatmap saved as float_cpu_simple_matrix_multiplication_relative_differences_heatmap.png
+Histogram saved as float_cpu_simple_matrix_multiplication_relative_differences_histogram.png
+double_cpu_simple_matrix_multiplication
+Average Runtime: 26.775223 seconds
+Uncertainty: ±0.910580 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.4014 seconds
+Verification successful: The result is correct.
+double_cuda_2d_tiled_register_cache_matrix_multiplication
+Average Runtime: 0.528181 seconds
+Uncertainty: ±0.015294 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.4017 seconds
+Verification successful: The result is correct.
+double_cuda_simple_matrix_multiplication
+Average Runtime: 0.719501 seconds
+Uncertainty: ±0.009080 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.4008 seconds
+Verification successful: The result is correct.
+double_cuda_tiled_matrix_multiplication
+Average Runtime: 0.495148 seconds
+Uncertainty: ±0.007734 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.4018 seconds
+Verification successful: The result is correct.
+float_cuda_2d_tiled_register_cache_matrix_multiplication
+Average Runtime: 0.110508 seconds
+Uncertainty: ±0.005524 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.4012 seconds
+Verification failed: The result is incorrect.
+Maximum relative difference: 5.873683
+Average relative difference: 0.000008
+Relative difference percentiles:
+  25th: 0.000000
+  50th: 0.000001
+  75th: 0.000002
+  95th: 0.000009
+  99th: 0.000045
+Percentage of entries with relative difference > 1%: 0.004375% = 1050/24000000
+Heatmap saved as float_cuda_2d_tiled_register_cache_matrix_multiplication_relative_differences_heatmap.png
+Histogram saved as float_cuda_2d_tiled_register_cache_matrix_multiplication_relative_differences_histogram.png
+float_cuda_simple_matrix_multiplication
+Average Runtime: 0.415212 seconds
+Uncertainty: ±0.005943 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.3996 seconds
+Verification failed: The result is incorrect.
+Maximum relative difference: 5.873683
+Average relative difference: 0.000008
+Relative difference percentiles:
+  25th: 0.000000
+  50th: 0.000001
+  75th: 0.000002
+  95th: 0.000009
+  99th: 0.000045
+Percentage of entries with relative difference > 1%: 0.004375% = 1050/24000000
+Heatmap saved as float_cuda_simple_matrix_multiplication_relative_differences_heatmap.png
+Histogram saved as float_cuda_simple_matrix_multiplication_relative_differences_histogram.png
+float_cuda_tiled_matrix_multiplication
+Average Runtime: 0.163560 seconds
+Uncertainty: ±0.010303 seconds
+Loading matrices...
+Verifying the result...
+Verified in 0.4022 seconds
+Verification failed: The result is incorrect.
+Maximum relative difference: 5.873683
+Average relative difference: 0.000008
+Relative difference percentiles:
+  25th: 0.000000
+  50th: 0.000001
+  75th: 0.000002
+  95th: 0.000009
+  99th: 0.000045
+Percentage of entries with relative difference > 1%: 0.004375% = 1050/24000000
+Heatmap saved as float_cuda_tiled_matrix_multiplication_relative_differences_heatmap.png
+Histogram saved as float_cuda_tiled_matrix_multiplication_relative_differences_histogram.png
