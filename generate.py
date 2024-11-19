@@ -8,7 +8,7 @@ def generate_matrix(filename, rows, cols):
         f.write(f"{rows} {cols}\n")
         # Generate matrix data and write to the file
         for _ in range(rows):
-            row = [f"{random.uniform(-100.0, 100.0):.6f}" for _ in range(cols)]
+            row = [f"{random.uniform(-100.0, 100.0):.2f}" for _ in range(cols)]
             f.write(" ".join(row) + "\n")
 
 if __name__ == "__main__":

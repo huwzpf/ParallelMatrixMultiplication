@@ -3,6 +3,10 @@
 #include <cuda_runtime.h>
 #include <time.h>
 
+#define BLOCK_SIZE 16
+// Divide x/y and round up
+#define CEIL_DIVISION(x, y) ((x) + (y) - 1)/(y)
+
 double *read_matrix(const char *filename, int *rows, int *cols) {
     FILE *file = fopen(filename, "r");
     if (!file) {
@@ -57,14 +61,63 @@ void validate_dimensions(int rowsA, int colsA, int rowsB, int colsB) {
 }
 
 __global__ void matrixMultiplyKernel(double *A, double *B, double *C, int rowsA, int colsA, int colsB) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    // Each block gets a square chunk (BLOCK_SIZE x BLOCK_SIZE) of C to compute based on chunks of A (BLOCK_SIZE x colsA) and B (colsA x BLOCK_SIZE)
+    // It does so by dividing chunks of A and B into square submatrices and accumulating partial results of submatrix multiplication:
+    // 1. Shared memory matrices As and Bs are allocated, each size of a BLOCK_SIZE x BLOCK_SIZE
+    // 2. A columns (being the same as B rows) are divided into colsA/BLOCK_SIZE submatrices (assumption is they divide without remainder)
+    // 3. Each thread initializes local variable val that will accumulate parial results for it's corresponding output C element
+    // 4. Offset along A columns (being the same as B rows) determining which submatrix is currently computed is initialized to 0
+    // 5. Each thread fetches single submatrix element into corresponding cell of As,Bs
+    // 6. Each thread does multiplication of As * Bs computing partial value for single element of C and adds the result to val
+    // 7. Submatrix offset is incremented
+    // 8. Steps 5-8 are repeated until pointer == colsA
+    // 9. C elements are fully computed and are copied to global memory
 
-    if (row < rowsA && col < colsB) {
-        for (int k = 0; k < colsA; ++k) {
-            C[row * colsB + col] += A[row * colsA + k] * B[k * colsB + col];
+    int subMatrixRow = threadIdx.y;
+    int subMatrixCol = threadIdx.x;
+
+    // Row along which given thread moves through A and column along which it moves through B are constant 
+    int rowA = blockIdx.y * blockDim.y + threadIdx.y;
+    int colB = blockIdx.x * blockDim.x + threadIdx.x;
+
+    __shared__ double As [BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ double Bs [BLOCK_SIZE][BLOCK_SIZE];
+
+    double val = 0;
+
+
+    for (int offset = 0; offset < colsA; offset+=BLOCK_SIZE) { 
+        // Padding the matrices and keeping the kernel without range checking actually makes it slower
+        
+        // Each thread moves through columns of matrix A
+        int colA = offset + threadIdx.x;
+        if (rowA < rowsA && colA < colsA) {
+            As[subMatrixRow][subMatrixCol] = A[rowA * colsA + colA];
         }
+        else {
+            As[subMatrixRow][subMatrixCol] = 0.0;
+        }
+
+        // Each thread moves through rows of matrix B
+        int rowB = offset + threadIdx.y;
+        if (rowB < colsA && colB < colsB) {
+            Bs[subMatrixRow][subMatrixCol] = B[rowB * colsB + colB];
+        }
+        else {
+            Bs[subMatrixRow][subMatrixCol] = 0.0;
+        }
+
+        __syncthreads();
+
+        for (int i = 0; i < BLOCK_SIZE; i++) {
+            val += As[subMatrixRow][i] * Bs[i][subMatrixCol];
+        }
+
+        __syncthreads();
     }
+
+    if (rowA < rowsA && colB < colsB)
+        C[rowA * colsB + colB] = val;
 }
 
 double *matrix_multiply_cuda(double *A, double *B, int rowsA, int colsA, int colsB) {
@@ -83,7 +136,7 @@ double *matrix_multiply_cuda(double *A, double *B, int rowsA, int colsA, int col
     cudaMemcpy(d_B, B, sizeB, cudaMemcpyHostToDevice);
 
     dim3 blockDim(16, 16);
-    dim3 gridDim((colsB + blockDim.x - 1) / blockDim.x, (rowsA + blockDim.y - 1) / blockDim.y);
+    dim3 gridDim(CEIL_DIVISION(colsB, blockDim.x), CEIL_DIVISION(rowsA, blockDim.y));
 
     matrixMultiplyKernel<<<gridDim, blockDim>>>(d_A, d_B, d_C, rowsA, colsA, colsB);
     cudaDeviceSynchronize();
@@ -117,7 +170,7 @@ int main(int argc, char *argv[]) {
     C = matrix_multiply_cuda(A, B, rowsA, colsA, colsB);
     double end_time = clock();
 
-    printf("Matrix multiplication completed in %f seconds\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
+    printf("Matrix multiplication completed in %lf seconds\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
 
     write_matrix(argv[3], C, rowsA, colsB);
 
