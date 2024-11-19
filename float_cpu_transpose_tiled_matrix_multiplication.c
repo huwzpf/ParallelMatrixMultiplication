@@ -3,9 +3,9 @@
 #include <omp.h>
 #include <time.h>
 
-#define BLOCK_SIZE 8
+#define BLOCK_SIZE 32
 
-double *read_matrix(const char *filename, int *rows, int *cols) {
+float *read_matrix(const char *filename, int *rows, int *cols) {
     FILE *file = fopen(filename, "r");
     if (!file) {
         fprintf(stderr, "Error opening file\n");
@@ -18,10 +18,10 @@ double *read_matrix(const char *filename, int *rows, int *cols) {
         exit(-1);
     }
 
-    double *matrix = (double *)malloc((*rows) * (*cols) * sizeof(double));
+    float *matrix = (float *)malloc((*rows) * (*cols) * sizeof(float));
 
     for (int i = 0; i < (*rows) * (*cols); i++) {
-        if (fscanf(file, "%lf", &matrix[i]) != 1) {
+        if (fscanf(file, "%f", &matrix[i]) != 1) {
             fprintf(stderr, "Invalid matrix data\n");
             fclose(file);
             exit(-1);
@@ -32,7 +32,7 @@ double *read_matrix(const char *filename, int *rows, int *cols) {
     return matrix;
 }
 
-void write_matrix(const char *filename, double *matrix, int rows, int cols) {
+void write_matrix(const char *filename, float *matrix, int rows, int cols) {
     FILE *file = fopen(filename, "w");
     if (!file) {
         fprintf(stderr, "Error opening file\n");
@@ -43,7 +43,7 @@ void write_matrix(const char *filename, double *matrix, int rows, int cols) {
 
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            fprintf(file, "%lf ", matrix[i * cols + j]);
+            fprintf(file, "%f ", matrix[i * cols + j]);
         }
         fprintf(file, "\n");
     }
@@ -58,8 +58,8 @@ void validate_dimensions(int rowsA, int colsA, int rowsB, int colsB) {
     }
 }
 
-double *transpose_matrix(double *M, int rows, int cols) {
-    double *M_T = (double *)malloc(rows * cols * sizeof(double));
+float *transpose_matrix(float *M, int rows, int cols) {
+    float *M_T = (float *)malloc(rows * cols * sizeof(float));
 
     // Perform the transposition using OpenMP
     #pragma omp parallel for
@@ -72,33 +72,22 @@ double *transpose_matrix(double *M, int rows, int cols) {
     return M_T;
 }
 
-double *matrix_multiply(double *A, double *B, int rowsA, int colsA, int colsB) {
-    double *C = (double *)malloc(rowsA * colsB * sizeof(double));
+float *matrix_multiply(float *A, float *B, int rowsA, int colsA, int colsB) {
+    float *C = (float *)malloc(rowsA * colsB * sizeof(float));
 
-    double *B_T = transpose_matrix(B, colsA, colsB);
+    float *B_T = transpose_matrix(B, colsA, colsB);
 
-    int num_threads = omp_get_max_threads();
-    int columns_per_thread = (colsB + num_threads - 1) / num_threads; // For evenly spaced column start
-
-    #pragma omp parallel for schedule(dynamic)
-    for (int i = 0; i < rowsA; i += BLOCK_SIZE) {
-        int col = (omp_get_thread_num() * columns_per_thread) % colsB;
-        for (int count = 0; count < (colsB + (colsB % BLOCK_SIZE)); count += BLOCK_SIZE) {
-            for (int ii = i; ii < i + BLOCK_SIZE && ii < rowsA; ii++) {
-                for (int jj = col; jj < col + BLOCK_SIZE && jj < colsB; jj++) {
-                    double sum = 0.0;
-                    #pragma omp simd
+    #pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int i_tile = 0; i_tile < rowsA; i_tile += BLOCK_SIZE) {
+        for (int j_tile = 0; j_tile < colsB; j_tile += BLOCK_SIZE) {
+            for (int i = i_tile; i < i_tile + BLOCK_SIZE && i < rowsA; i++) {
+                for (int j = j_tile; j < j_tile + BLOCK_SIZE && j < colsB; j++) {
+                    float sum = 0.0;
                     for (int k = 0; k < colsA; k++) {
-                        sum += A[ii * colsA + k] * B_T[jj * colsA + k];
+                        sum += A[i * colsA + k] * B_T[j * colsA + k];
                     }
-                    C[ii * colsB + jj] = sum;
+                    C[i * colsB + j] = sum;
                 }
-            }
-
-            // Move to the next column with wrap-around
-            col += BLOCK_SIZE;
-            if (col >= colsB) {
-                col = 0;
             }
         }
     }
@@ -114,24 +103,29 @@ int main(int argc, char *argv[]) {
     }
 
     int rowsA, colsA, rowsB, colsB;
-    double *A, *B, *C;
+    float *A, *B, *C;
 
+    // Load matrices from files
     A = read_matrix(argv[1], &rowsA, &colsA);
     B = read_matrix(argv[2], &rowsB, &colsB);
 
+    // Validate matrix dimensions for multiplication
     validate_dimensions(rowsA, colsA, rowsB, colsB);
 
     printf("Done loading data, starting computations with %d threads\n", omp_get_max_threads());
     omp_set_num_threads(omp_get_max_threads());
 
-    double start_time = omp_get_wtime();
+    // Measure the time of matrix multiplication
+    float start_time = omp_get_wtime();
     C = matrix_multiply(A, B, rowsA, colsA, colsB);
-    double end_time = omp_get_wtime();
+    float end_time = omp_get_wtime();
 
     printf("Matrix multiplication completed in %f seconds\n", end_time - start_time);
 
+    // Save the result matrix to file
     write_matrix(argv[3], C, rowsA, colsB);
 
+    // Free allocated memory
     free(A);
     free(B);
     free(C);
