@@ -14,7 +14,7 @@ def generate_matrix(filename, rows, cols):
 if __name__ == "__main__":
     # Check if the correct number of arguments is provided
     if len(sys.argv) != 6:
-        print("Usage: python generate_matrices.py <rowsA> <colsA> <colsB> <matrixA.txt> <matrixB.txt>")
+        print("Usage: python generate.py <rowsA> <colsA> <colsB> <matrixA.txt> <matrixB.txt>")
         sys.exit(-1)
 
     # Read dimensions from command line arguments

@@ -2,7 +2,7 @@ import subprocess
 import re
 #  gcc -fopenmp -O3 -o matrix_multiply 1_2.c
 # Number of iterations
-num_iterations = 10
+num_iterations = 1
 runtimes = []
 
 # Regex pattern to extract the runtime from the output

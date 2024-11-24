@@ -1,18 +1,8 @@
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 #include <time.h>
 
 #include "utils.h"
-
-__global__ void matrixMultiplyKernel(float *A, float *B, float *C, int rowsA, int colsA, int colsB) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (row < rowsA && col < colsB) {
-        for (int k = 0; k < colsA; ++k) {
-            C[row * colsB + col] += A[row * colsA + k] * B[k * colsB + col];
-        }
-    }
-}
 
 float *matrix_multiply_cuda(float *A, float *B, int rowsA, int colsA, int colsB) {
     float *C = (float *)malloc(rowsA * colsB * sizeof(float));
@@ -29,13 +19,25 @@ float *matrix_multiply_cuda(float *A, float *B, int rowsA, int colsA, int colsB)
     cudaMemcpy(d_A, A, sizeA, cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, B, sizeB, cudaMemcpyHostToDevice);
 
-    dim3 blockDim(16, 16);
-    dim3 gridDim((colsB + blockDim.x - 1) / blockDim.x, (rowsA + blockDim.y - 1) / blockDim.y);
+    // Use cuBLAS for matrix multiplication
+    cublasHandle_t handle;
+    cublasCreate(&handle);
 
-    matrixMultiplyKernel<<<gridDim, blockDim>>>(d_A, d_B, d_C, rowsA, colsA, colsB);
-    cudaDeviceSynchronize();
+    const float alpha = 1.0f;
+    const float beta = 0.0f;
 
+    // Perform the matrix multiplication: C = alpha * A * B + beta * C
+    // A: rowsA x colsA, B: colsA x colsB, C: rowsA x colsB
+    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, 
+                colsB, rowsA, colsA, 
+                &alpha, 
+                d_B, colsB, 
+                d_A, colsA, 
+                &beta, 
+                d_C, colsB);
     cudaMemcpy(C, d_C, sizeC, cudaMemcpyDeviceToHost);
+
+    cublasDestroy(handle);
 
     cudaFree(d_A);
     cudaFree(d_B);
@@ -68,7 +70,6 @@ int main(int argc, char *argv[]) {
 
     write_float_matrix(argv[3], C, rowsA, colsB);
 
-    // Free allocated memory
     free(A);
     free(B);
     free(C);

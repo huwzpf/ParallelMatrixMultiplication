@@ -1,64 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <cuda_runtime.h>
 #include <time.h>
 
+#include "utils.h"
+
 #define BLOCK_SIZE 16
-// Divide x/y and round up
-#define CEIL_DIVISION(x, y) ((x) + (y) - 1)/(y)
-
-float *read_matrix(const char *filename, int *rows, int *cols) {
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        fprintf(stderr, "Error opening file\n");
-        exit(-1);
-    }
-
-    if (fscanf(file, "%d %d\n", rows, cols) != 2) {
-        fprintf(stderr, "Invalid matrix format\n");
-        fclose(file);
-        exit(-1);
-    }
-
-    float *matrix = (float *)malloc((*rows) * (*cols) * sizeof(float));
-
-    for (int i = 0; i < (*rows) * (*cols); i++) {
-        if (fscanf(file, "%f", &matrix[i]) != 1) {
-            fprintf(stderr, "Invalid matrix data\n");
-            fclose(file);
-            exit(-1);
-        }
-    }
-
-    fclose(file);
-    return matrix;
-}
-
-void write_matrix(const char *filename, float *matrix, int rows, int cols) {
-    FILE *file = fopen(filename, "w");
-    if (!file) {
-        fprintf(stderr, "Error opening file\n");
-        exit(-1);
-    }
-
-    fprintf(file, "%d %d\n", rows, cols);
-
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            fprintf(file, "%f ", matrix[i * cols + j]);
-        }
-        fprintf(file, "\n");
-    }
-
-    fclose(file);
-}
-
-void validate_dimensions(int rowsA, int colsA, int rowsB, int colsB) {
-    if (colsA != rowsB) {
-        fprintf(stderr, "Matrix dimensions mismatch: %d != %d\n", colsA, rowsB);
-        exit(-1);
-    }
-}
 
 __global__ void matrixMultiplyKernel(float *A, float *B, float *C, int rowsA, int colsA, int colsB) {
     // Each block gets a square chunk (BLOCK_SIZE x BLOCK_SIZE) of C to compute based on chunks of A (BLOCK_SIZE x colsA) and B (colsA x BLOCK_SIZE)
@@ -159,8 +104,8 @@ int main(int argc, char *argv[]) {
     int rowsA, colsA, rowsB, colsB;
     float *A, *B, *C;
 
-    A = read_matrix(argv[1], &rowsA, &colsA);
-    B = read_matrix(argv[2], &rowsB, &colsB);
+    A = read_float_matrix(argv[1], &rowsA, &colsA);
+    B = read_float_matrix(argv[2], &rowsB, &colsB);
 
     validate_dimensions(rowsA, colsA, rowsB, colsB);
 
@@ -172,7 +117,7 @@ int main(int argc, char *argv[]) {
 
     printf("Matrix multiplication completed in %f seconds\n", (float)(end_time - start_time) / CLOCKS_PER_SEC);
 
-    write_matrix(argv[3], C, rowsA, colsB);
+    write_float_matrix(argv[3], C, rowsA, colsB);
 
     // Free allocated memory
     free(A);

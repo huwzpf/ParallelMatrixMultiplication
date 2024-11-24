@@ -10,7 +10,7 @@ cpu_run_names=(
 
 # Iterate over each run name
 for run_name in "${cpu_run_names[@]}"; do
-  echo "$run_name"
+  printf "\n%s\n\n" "$run_name"
   gcc -fopenmp -O3 -o matrix_multiply "${run_name}.c" \
     && python3 measure.py \
     && python3 verify.py 1.txt 2.txt 3.txt "$run_name"
@@ -27,7 +27,7 @@ gpu_run_names=(
 
 # Iterate over each run name
 for run_name in "${gpu_run_names[@]}"; do
-  echo "$run_name"
+  printf "\n%s\n\n" "$run_name"
   nvcc "${run_name}.cu" -o matrix_multiply -lcudart \
     && python3 measure.py \
     && python3 verify.py 1.txt 2.txt 3.txt "$run_name"

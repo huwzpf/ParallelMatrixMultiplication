@@ -1,62 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <omp.h>
 #include <time.h>
 
+#include "utils.h"
+
 #define BLOCK_SIZE 32
-
-float *read_matrix(const char *filename, int *rows, int *cols) {
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        fprintf(stderr, "Error opening file\n");
-        exit(-1);
-    }
-
-    if (fscanf(file, "%d %d\n", rows, cols) != 2) {
-        fprintf(stderr, "Invalid matrix format\n");
-        fclose(file);
-        exit(-1);
-    }
-
-    float *matrix = (float *)malloc((*rows) * (*cols) * sizeof(float));
-
-    for (int i = 0; i < (*rows) * (*cols); i++) {
-        if (fscanf(file, "%f", &matrix[i]) != 1) {
-            fprintf(stderr, "Invalid matrix data\n");
-            fclose(file);
-            exit(-1);
-        }
-    }
-
-    fclose(file);
-    return matrix;
-}
-
-void write_matrix(const char *filename, float *matrix, int rows, int cols) {
-    FILE *file = fopen(filename, "w");
-    if (!file) {
-        fprintf(stderr, "Error opening file\n");
-        exit(-1);
-    }
-
-    fprintf(file, "%d %d\n", rows, cols);
-
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            fprintf(file, "%f ", matrix[i * cols + j]);
-        }
-        fprintf(file, "\n");
-    }
-
-    fclose(file);
-}
-
-void validate_dimensions(int rowsA, int colsA, int rowsB, int colsB) {
-    if (colsA != rowsB) {
-        fprintf(stderr, "Matrix dimensions mismatch: %d != %d\n", colsA, rowsB);
-        exit(-1);
-    }
-}
 
 float *transpose_matrix(float *M, int rows, int cols) {
     float *M_T = (float *)malloc(rows * cols * sizeof(float));
@@ -106,8 +53,8 @@ int main(int argc, char *argv[]) {
     float *A, *B, *C;
 
     // Load matrices from files
-    A = read_matrix(argv[1], &rowsA, &colsA);
-    B = read_matrix(argv[2], &rowsB, &colsB);
+    A = read_float_matrix(argv[1], &rowsA, &colsA);
+    B = read_float_matrix(argv[2], &rowsB, &colsB);
 
     // Validate matrix dimensions for multiplication
     validate_dimensions(rowsA, colsA, rowsB, colsB);
@@ -123,7 +70,7 @@ int main(int argc, char *argv[]) {
     printf("Matrix multiplication completed in %f seconds\n", end_time - start_time);
 
     // Save the result matrix to file
-    write_matrix(argv[3], C, rowsA, colsB);
+    write_float_matrix(argv[3], C, rowsA, colsB);
 
     // Free allocated memory
     free(A);
